@@ -1,0 +1,398 @@
+---
+title: "Kaiser EDA"
+author: "Heather"
+date: "02/10/2020"
+output: html_document
+---
+
+This is my attempt at an EDA of the Kaiser dataset. This is actually the first time I've done "an EDA" on my own, so let's see how it goes. I'd love feedback (as always). Everything in this file is for the outpatient visits. It's possible to replicate it for the 4 other files by substituting d1 as a different element of the list of dataframes of different outcomes. 
+
+Read in data:
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here) # beware of here from lubridate masking here from here later on - can cause errors. 
+fls = list.files(path = here("/data_processing/raw_data/DMEdatasets20200929172326"))
+setwd(here("/data_processing/raw_data/DMEdatasets20200929172326"))
+dt = lapply(fls, read.csv)
+```
+
+Check dims. 
+
+```{r}
+lapply(dt, dim)
+```
+
+In here we have wildfire occurences, pm concentrations, health outcomes, and soc ec covariates.  
+
+The five csv files each contain data for a different outcome. Respectively, they have outpatient visits, inpatient visits, ED visits, inpatient visits related to cardiovascular problems, and ED visits related to cardiovascular problems. These are visits by Kaiser patients to Kaiser care facilities (I think - Joan confirm?).
+
+Check to see that they're not all identical, because that happened before:
+
+```{r}
+for (i in 1:5) {
+  for (j in 1:5){
+    print(identical(dt[[i]], dt[[j]]))
+  }
+}
+```
+
+Good, they're identical only to themselves, haha.
+
+Focusing on one file:
+```{r}
+head(dt[[1]])
+```
+
+Ok so this is the file containing outpatient visits for any disease - A stands for outpatient visit in the "daily_byzip_ct_A_anydisease", while i is for inpatient, r for ED. "i_circulatory" and "r_circulatory" are the circulatory system/cardiovascular visits:
+
+From inspecting the object in R Studio we see the classes of the columns. Can also see that many rows are all NA after the daily visit count - these ZIPs are just not in the study area and so that's fine; I can remove. First few cols of rows outside the area just have missing/blank obs instead of NAs. 
+
+Columns are:
+
+1. Date of visits
+2. ZIP id - unique ID corresponding to a ZIP that is not a ZIP for privacy.
+3. Visit count
+4. Date. Hmm this is also date. Is it always the same as admit date?
+
+```{r}
+d1 <- dt[[1]] %>% 
+  filter((is.na(zcta) == FALSE) & (is.na(getty) == FALSE)) %>% # attempt to filter out rows outside the study area
+  mutate(date = as.Date(date, format='%d%b%Y'), admitdate = as.Date(date, format='%d%b%Y')) #standardize dates into date class
+identical(d1$admitdate, d1$date) # check if the same
+```
+
+Yes they are the same. OK.
+Continuing w cols:
+
+5. County.
+6. PO name - a smaller geographic unit within a county (postal delivery unit?)
+7. Zcta: this is the census geographical unit, and is identifiable. 
+8. Getty: Whether or not the getty fire was burning on this day. 
+9. Getty disaster: whether or not the zip was withing 20 km of the fire boundary.
+10. Woosley: same but for woosley.
+11. Woosley disaster: same but for woosley.
+12. Particulate matter concentration in the air which is not from wildfires - not from any wildfire, from sat data, not only Getty & Woolsey.
+13. Particulate matter concentration in the air which is from wildfires - from any wildfire, sat data.
+
+Rest are soc ec variables and population:
+
+14. Percentage of population that's poor? (confirm?)
+15. Percent of pop with high school diploma? (confirm?)
+16. Median income.
+17. Percent pop over 65.
+18. Total population.
+19. Percent of pop that's black (census def?)
+20. Percent of pop that's hispanic (census def?)
+21. Percent of pop that's white (census def?)
+ 
+Sanity check the columns:
+
+```{r}
+dim(d1)
+length(unique(d1$zipid)) # good; there are 785 for each date; checks out
+sum(is.na(d1$zipid)) # no missing data
+```
+
+Visit counts:
+
+```{r}
+summary(d1$daily_byzip_ct_A_anydisease) # ranges between 0 and 26
+sum(d1$daily_byzip_ct_A_anydisease == 0)/length(d1$daily_byzip_ct_A_anydisease) # half are 0
+sum(is.na(d1$daily_byzip_ct_A_anydisease)) # no missing data
+
+hist(d1$daily_byzip_ct_A_anydisease) # show 0s
+
+d1 %>% select(daily_byzip_ct_A_anydisease) %>% filter(daily_byzip_ct_A_anydisease != 0) %>% ggplot(aes(daily_byzip_ct_A_anydisease)) + geom_histogram() # most of the rest are 1
+```
+
+How do the visits look accross the study period?
+```{r}
+# time series
+d1 %>% group_by(county, date) %>% summarise_at(.vars = c("daily_byzip_ct_A_anydisease"), .funs = sum) %>% ggplot() + geom_point(aes(x = date, y = daily_byzip_ct_A_anydisease)) + facet_wrap(facets = c("county"))
+```
+
+Looks like there is variation, possibly in days of the week/working vs holiday? Let's check:
+
+```{r}
+library(lubridate)
+d1 %>% 
+  group_by(county, date) %>% 
+  summarise_at(.vars = c("daily_byzip_ct_A_anydisease"),
+                                          .funs = sum) %>% 
+  mutate(wkday = as.factor(wday(date))) %>% # sunday is 1
+  ggplot() + 
+  geom_point(aes(x = date, y = daily_byzip_ct_A_anydisease, color = wkday)) + 
+  facet_wrap(facets = c("county"))
+
+d1 %>% 
+  group_by(county, date) %>% 
+  summarise_at(.vars = c("daily_byzip_ct_A_anydisease"),
+                                          .funs = sum) %>% 
+  mutate(wkday = as.factor(wday(date))) %>% 
+  filter(wkday %in% c(2, 3)) %>% # monday, tuesday
+  ggplot() + geom_point(aes(x = date, y = daily_byzip_ct_A_anydisease, color = wkday)) + 
+  facet_wrap(facets = c("county"))
+```
+
+Yes, much lower visits for everything on the weekend. Not a perfect relationship though; are the outliers holidays?
+
+Get christmases that fall on a Monday or Tuesday and highlight them - are they some of those low points?
+
+```{r}
+kl <- d1 %>%
+  group_by(county, date) %>%
+  summarise_at(.vars = c("daily_byzip_ct_A_anydisease"),
+               .funs = sum) %>%
+  mutate(wkday = as.factor(wday(date))) %>%
+  filter(wkday %in% c(2, 3)) %>% # monday, tuesday
+  filter(
+    date == as.Date("2016-12-25") |
+      date == as.Date("2017-12-25") |
+      date == as.Date("2018-12-25") | 
+      date == as.Date("2019-12-25")
+  ) 
+
+dim(kl) # count them
+
+d1 %>% 
+  group_by(county, date) %>% 
+  summarise_at(.vars = c("daily_byzip_ct_A_anydisease"),
+                                          .funs = sum) %>% 
+  mutate(wkday = as.factor(wday(date))) %>% 
+  filter(wkday %in% c(2, 3)) %>% # monday, tuesday
+  ggplot() + geom_point(aes(x = date, y = daily_byzip_ct_A_anydisease, color = wkday)) + 
+  facet_wrap(facets = c("county")) + 
+  geom_point(data = kl, aes(x = date, y = daily_byzip_ct_A_anydisease, color = "christmas")) 
+```
+
+Hypothesis supported. Does this pattern hold in smaller counties, obscured by the scale of the plot?
+
+```{r}
+d1 %>% group_by(county, date) %>% summarise_at(.vars = c("daily_byzip_ct_A_anydisease"), .funs = sum) %>% filter(county == "Ventura County") %>% ggplot() + geom_point(aes(x = date, y = daily_byzip_ct_A_anydisease)) + facet_wrap(facets = c("county"))
+```
+
+Yes.
+
+Onward to counties. How many counties in study area? Which ones?
+
+```{r}
+length(unique(d1$county)) # seven; ok
+sum(is.na(d1$county)) # no missing data
+print(unique(d1$county)) # print the counties
+```
+
+PO names?
+
+```{r}
+length(unique(d1$po_name))
+sum(is.na(d1$po_name))
+```
+
+Zcta?
+
+```{r}
+length(unique(d1$zcta))
+sum(is.na(d1$zcta))
+```
+
+Check dates and times in dataset:
+
+```{r}
+# check times
+# what's the date range? 
+min(d1$date)
+max(d1$date) # jan 2016 - march 2020 (rona)
+```
+
+When were the fires?
+
+```{r}
+d1 %>% group_by(date) %>% summarise_at(.funs = max, .vars = c("getty", "woolsey")) %>% ggplot() + geom_point(aes(x = date, y = getty), colour = "red") + geom_point(aes(x = date, y = woolsey), colour = "orange")
+```
+
+The disaster columns:
+What percentage zips were in the disaster zones?
+
+```{r}
+length(unique(filter(d1, d1$getty_disaster_20km == 1)$zipid))/length(d1$zipid) # very few
+sum(is.na(d1$getty_disaster_20km)) # no missing data
+
+length(unique(filter(d1, d1$woolsey_disaster_20km == 1)$zipid))/length(d1$zipid) # even fewer in woolsey zone
+length(unique(filter(d1, d1$woolsey_disaster_20km == 1)$zipid))
+sum(is.na(d1$woolsey_disaster_20km)) # no missing data
+```
+
+Almost no zips were in either of the diasaster zones. 
+Were any in both?
+
+```{r}
+length(unique(filter(d1, d1$getty_disaster_20km == 1 & d1$woolsey_disaster_20km)))
+unique(filter(d1, getty_disaster_20km == 1 & woolsey_disaster_20km == 1)$county)
+```
+
+Quite a few - makes sense because fires were in similar places. All zips invovled were in LA and Ventura - that's right. 
+
+Particulate Matter:
+
+```{r}
+sum(is.na(d1$non_wf_pm)) # well there we go; a significant missingness
+sum(is.na(d1$non_wf_pm))/length(d1$non_wf_pm) # hmm - almost 14% of obs missing,. 
+# any pattern?
+
+d1 %>% group_by(county, date) %>% summarise(na_count = sum(is.na(non_wf_pm))) %>% ggplot() + geom_point(aes(x = date, y = na_count)) + facet_wrap(facets = c("county"))
+
+# try plot Matt used for this:
+d1 %>% group_by(date, county) %>% summarise(na_count = sum(is.na(non_wf_pm))) %>% ggplot(aes(x = date, y = county, fill = na_count)) + geom_tile() + theme_classic() + scale_fill_distiller(
+        "NAs per day", 
+        palette = "Spectral",
+        labels = function(x)
+            sprintf("%i", round(x))
+    ) + 
+    theme(legend.position = "bottom", 
+          axis.text.y = element_blank()) 
+```
+
+Could some zips consistently be missing measurements? Numbers of NAs look very regular. 
+
+```{r}
+library(DT)
+d1 %>% group_by(zipid) %>% summarise(na_count = sum(is.na(non_wf_pm)), n_obs = n()) %>% arrange(-c(na_count)) %>% DT::datatable(rownames = FALSE)
+```
+
+Okay, so there are some zips where the vast majority of the observations are missing. 
+
+Added new on Oct 15: Exploring the distribution of missing observations in zips:
+
+```{r}
+miss <- d1 %>% group_by(zipid) %>% 
+  summarise(na_count = sum(is.na(non_wf_pm)), n_obs = n()) %>% 
+  arrange(-c(na_count)) %>%
+  mutate(perc_miss = na_count/n_obs) 
+
+miss %>%
+  ggplot(aes(x = perc_miss)) + 
+  geom_histogram() + 
+  labs(x = "Percent Missing in Zip Code", y = "Number of Zips with Certain % Missing")
+
+# number of zips w over 50% missing 
+l <- miss %>% filter(perc_miss > 0.5)
+
+length(l$perc_miss) / length(miss$perc_miss)
+
+k <- miss %>% filter(perc_miss == 0)
+length(k$perc_miss) / length(miss$perc_miss)
+```
+
+THat's funny. The total percentage of missing observations was ~14% - 13.8% to be exact, and the percentage of counties missing over half the observations is also 13.8% exactly. I don't think it's an error. 24% are missing no observations at all. Because the patterns of missingness are the same for wf and nonwf pm, this is true for wf pm also. 
+
+Check to see if any of the zips we care about are missing:
+
+```{r}
+s <- d1 %>% filter(getty_disaster_20km == 1 | woolsey_disaster_20km == 1) 
+s1 <- length(unique(s$zipid))
+s1 %in% l
+```
+Good none of them are. 
+
+PM measurements over time:
+(Light blue is fires.)
+
+```{r}
+
+d1 %>% group_by(county, date) %>% summarise_at(.funs = c(mean), .vars = c("non_wf_pm", "getty", "woolsey"), na.rm = TRUE) %>% mutate(fire_on = getty + woolsey) %>% ggplot() + geom_point(aes(x = date, y = non_wf_pm, colour = fire_on)) + facet_wrap(facets = "county") + theme(legend.position="none")
+```
+
+Repeat for wildfire pm:
+
+```{r}
+sum(is.na(d1$wf_pm25)) # well there we go; a significant missingness
+sum(is.na(d1$wf_pm25))/length(d1$wf_pm25) # same as non_wf - almost 14% of obs missing. 
+# any pattern?
+
+d1 %>% group_by(county, date) %>% summarise(na_count = sum(is.na(wf_pm25))) %>% ggplot() + geom_point(aes(x = date, y = na_count)) + facet_wrap(facets = c("county"))
+
+# identical pattern of missingness to non_wf
+```
+
+Wildfire pm 25 over time: 
+
+```{r}
+d1 %>% group_by(county, date) %>% summarise_at(.funs = c(mean), .vars = c("wf_pm25", "getty", "woolsey"), na.rm = TRUE) %>% mutate(fire_on = getty + woolsey) %>% ggplot() + geom_point(aes(x = date, y = wf_pm25, colour = fire_on)) + facet_wrap(facets = "county") + theme(legend.position="none")
+```
+
+I'm going to call summary on the soc ec columns and just make sure they're plausible - looking for errors. 
+
+```{r}
+summary(d1[,14:21])
+```
+
+I'm guessing pov_p is not percent of pop in poverty, since 100% is not a plausible value for it. What is it?
+Edited to add: Joan said it is a plausible value; there are some zips where everyone is below the poverty line. 
+
+Checking missing data:
+
+```{r}
+apply(d1, MARGIN = 2, function(x) sum(is.na(x)))
+```
+
+Some is missing in med_inc. 
+
+```{r}
+k <- d1 %>% filter(is.na(med_inc))
+k <- unique(k$zipid)
+l <- d1 %>% filter(zipid %in% k)
+sum(is.na(l$med_inc))/length(l$med_inc)
+# missing zips:
+print(k)
+```
+
+All in 4 zip codes, and those zips are missing all median income data. 
+
+Zips we care about in particular:
+
+```{r}
+s <- d1 %>% filter(getty_disaster_20km == 1 | woolsey_disaster_20km == 1) 
+s1 <- length(unique(s$zipid))
+
+k %in% s1
+```
+
+Good, none of the ones we care about in particular are missing. 
+
+Okay now for some other relationship things. Want to know about the relationship between wildfires and hospital visits. Probably should also standardize hospital visits by population of a zip. This is crude, but what can we see?
+
+```{r}
+wild <- d1 %>% mutate(std_visits = daily_byzip_ct_A_anydisease / tot_pop, fire_on = getty + woolsey) 
+
+wild %>% group_by(county) %>% ggplot(aes(x = date, y = std_visits, color = fire_on)) + geom_point() + facet_wrap(facets = "county") + theme(legend.position="none")
+```
+
+Not much but that's not surprising. 
+
+```{r}
+wild %>% filter(getty_disaster_20km == 1) %>% group_by(county) %>% ggplot(aes(x = date, y = std_visits, color = fire_on)) + geom_point() + facet_wrap(facets = "county") + theme(legend.position="none")
+
+wild %>% filter(woolsey_disaster_20km == 1) %>% group_by(county) %>% ggplot(aes(x = date, y = std_visits, color = fire_on)) + geom_point() + facet_wrap(facets = "county") + theme(legend.position="none")
+```
+ 
+ No.
+ 
+```{r}
+wild %>% ggplot(aes(x = wf_pm25, y = daily_byzip_ct_A_anydisease)) + geom_point()
+wild %>% ggplot(aes(x = wf_pm25, y = std_visits)) + geom_point()
+```
+
+Hm. 
+
+```{r}
+wild %>% filter(getty_disaster_20km == 1 | woolsey_disaster_20km == 1) %>% ggplot(aes(x = wf_pm25, y = daily_byzip_ct_A_anydisease)) + geom_point()
+wild %>% ggplot(aes(x = wf_pm25, y = std_visits)) + geom_point()
+```
+
+
+
+
+

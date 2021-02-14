@@ -1,0 +1,145 @@
+---
+title: "Wildfires and Health Care Visits"
+author: "Heather"
+date: "04/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(here)
+
+# read in, add zips
+xwalk <-
+  read_csv("zip_zcta_xwalk.csv") %>% 
+  select(c("zip_code", "zcta"))
+
+fls = list.files(path = here("/DMEdatasets20200929172326"), pattern="*.csv")
+setwd(here("/DMEdatasets20200929172326"))
+dt = lapply(fls, read_csv)
+
+# combine files
+all_dat <- dt[[1]] %>% mutate(
+  daily_byzip_ct_I_anydisease = dt[[2]]$daily_byzip_ct_I_anydisease,
+  daily_byzip_ct_R_anydisease = dt[[3]]$daily_byzip_ct_R_anydisease,
+  daily_byzip_ct_I_circulatory = dt[[4]]$daily_byzip_ct_I_circulatory,
+  daily_byzip_ct_R_circulatory = dt[[5]]$daily_byzip_ct_R_circulatory
+) %>% left_join(xwalk)
+
+
+library(lubridate)
+
+# get rid of rows of data outside study area, and standardize dates + agg by week
+all_dat <- all_dat %>%
+  filter((is.na(zcta) == FALSE) &
+           (is.na(getty) == FALSE)) %>% # attempt to filter out rows outside the study area
+  mutate(
+    date = as.Date(date, format = '%d%b%Y'),
+    admitdate = as.Date(date, format = '%d%b%Y')
+  ) %>%  # standardize dates into date class
+  mutate(year = year(date), week = week(date)) %>%
+  mutate(week = formatC(as.numeric(week), width = 2, format = "d", flag = "0")) %>%
+  mutate(week_year = paste(year, week, sep = ""), fire = getty + woolsey) %>%
+  group_by(week_year, zip_code) %>%
+  add_tally(wt = daily_byzip_ct_A_anydisease, name = "outp_tally") %>%
+  add_tally(wt = daily_byzip_ct_I_anydisease, name = "inp_tally") %>%
+  add_tally(wt = daily_byzip_ct_R_anydisease, name = "emg_tally") %>%
+  add_tally(wt = daily_byzip_ct_I_circulatory, name = "inpcirc_tally") %>%
+  add_tally(wt = daily_byzip_ct_R_circulatory, name = "emgcirc_tally")
+```
+
+
+
+```{r}
+# plot aggregated data
+all_dat %>% 
+  ggplot() + 
+  geom_point(aes(x = as.numeric(week_year), y = "outp_tally", color = fire)) + 
+  facet_wrap(facets = c("county"))
+
+all_dat %>% 
+  ggplot() + 
+  geom_point(aes(x = as.numeric(week_year), y = "inp_tally", color = fire)) + 
+  facet_wrap(facets = c("county"))
+
+all_dat %>% 
+  ggplot() + 
+  geom_point(aes(x = as.numeric(week_year), y = "emg_tally", color = fire)) + 
+  facet_wrap(facets = c("county"))
+
+all_dat %>% 
+  ggplot() + 
+  geom_point(aes(x = as.numeric(week_year), y = "inpcirc_tally", color = fire)) + 
+  facet_wrap(facets = c("county"))
+
+all_dat %>% 
+  ggplot() + 
+  geom_point(aes(x = as.numeric(week_year), y = "emgcirc_tally", color = fire)) + 
+  facet_wrap(facets = c("county"))
+```
+
+
+```{r}
+# analytic data frame:
+an_dat <- all_dat %>% select(outp_tally, inp_tally, emg_tally, inpcirc_tally, emgcirc_tally, getty_disaster_20km, woolsey_disaster_20km, getty, woolsey, fire)
+
+# models
+library(MASS)
+
+# outpatient
+outpg <- glm.nb(outp_tally ~ getty_disaster_20km * getty, data = an_dat)
+print(summary(outpg))
+outpw <- glm.nb(outp_tally ~ woolsey_disaster_20km * woolsey, data = an_dat)
+summary(outpw)
+
+outpgc <- glm.nb(outp_tally ~ getty_disaster_20km + getty, data = an_dat)
+print(summary(outpgc))
+outpwc <- glm.nb(outp_tally ~ woolsey_disaster_20km + woolsey, data = an_dat)
+summary(outpwc)
+
+# inpatient
+inpg <- glm.nb(inp_tally ~ getty_disaster_20km * getty, data = an_dat)
+print(summary(inpg))
+inpw <- glm.nb(inp_tally ~ woolsey_disaster_20km * woolsey, data = an_dat)
+summary(inpw)
+
+inpgc <- glm.nb(inp_tally ~ getty_disaster_20km + getty, data = an_dat)
+print(summary(inpgc))
+inpwc <- glm.nb(inp_tally ~ woolsey_disaster_20km + woolsey, data = an_dat)
+summary(inpwc)
+
+# emergency
+emgg <- glm.nb(emg_tally ~ getty_disaster_20km * getty, data = an_dat)
+print(summary(emgg))
+emgw <- glm.nb(emg_tally ~ woolsey_disaster_20km * woolsey, data = an_dat)
+summary(emgw)
+
+emggc <- glm.nb(emg_tally ~ getty_disaster_20km + getty, data = an_dat)
+print(summary(emggc))
+emgwc <- glm.nb(emg_tally ~ woolsey_disaster_20km + woolsey, data = an_dat)
+summary(emgwc)
+
+# inpatient cardio
+inpcircg <- glm.nb(inpcirc_tally ~ getty_disaster_20km * getty, data = an_dat)
+print(summary(inpcircg))
+inpcircw <- glm.nb(inpcirc_tally ~ woolsey_disaster_20km * woolsey, data = an_dat)
+summary(inpcircw)
+
+inpcircgc <- glm.nb(inpcirc_tally ~ getty_disaster_20km + getty, data = an_dat)
+print(summary(inpcircgc))
+inpcircw <- glm.nb(inpcirc_tally ~ woolsey_disaster_20km + woolsey, data = an_dat)
+summary(inpcircw)
+
+# emerg cardio
+emgcircg <- glm.nb(emgcirc_tally ~ getty_disaster_20km * getty, data = an_dat)
+print(summary(emgcircg))
+emgcircw <- glm.nb(emgcirc_tally ~ woolsey_disaster_20km * woolsey, data = an_dat)
+summary(emgcircw)
+
+emgcircgc <- glm.nb(emgcirc_tally ~ getty_disaster_20km + getty, data = an_dat)
+print(summary(emgcircgc))
+emgcircwc <- glm.nb(emgcirc_tally ~ woolsey_disaster_20km + woolsey, data = an_dat)
+summary(emgpcircwc)
+```
+
+
