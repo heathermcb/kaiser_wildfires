@@ -81,9 +81,8 @@ dat <- dat %>% mutate(year = year(date), week = week(date)) %>%
 s = sort(unique(dat$week_year))
 wkyrseq <- seq(1, length(s), 1)
 s <- data.frame(s, wkyrseq) %>% rename(week_year = s)
-dat <- dat %>% left_join(dat)
+dat <- dat %>% left_join(s)
 
-library(here)
-
+# write
 write.csv(dat, here::here('/data/an_dat.csv'))
 
