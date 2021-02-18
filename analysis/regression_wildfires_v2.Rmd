@@ -1,0 +1,80 @@
+---
+title: "Kaiser Models"
+author: "Heather"
+date: "18/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(mgcv)
+
+an_dat <- read.csv(("../data_processing/data/an_dat.csv"), row.names = 1)
+```
+
+
+```{r}
+### check the relationship between temperature and hospital visits, so we know what kind of relationship it should have to the outcome
+### we already know time is an s() because we plotted that during the EDA
+
+an_dat %>% ggplot(aes(x = wkmntp, y = visitsA)) + geom_line()
+an_dat %>% ggplot(aes(x = wkmntp, y = visitsI)) + geom_line()
+
+# definitely looks non-linear/polynomial
+# missing data is because we don't have temperature data for 2020 yet, and there are some dates in 2020. 
+```
+
+
+```{r}
+m1 <- gam(visitsA ~ getty + getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+# nb should estimate theta parameter (dispersion parameter), whereas negbin would not and would require a specification
+plot(m1)
+summary(m1)
+
+m2 <- gam(visitsI ~ getty + getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+plot(m2)
+summary(m2)
+
+m3 <- gam(visitsR ~ getty + getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+plot(m3)
+summary(m3)
+
+m4 <- gam(visitsIC ~ getty + getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+plot(m4)
+summary(m4)
+
+m5 <- gam(visitsRC ~ getty + getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+plot(m5)
+summary(m5)
+```
+
+
+And Woolsey:
+
+```{r}
+w1 <- gam(visitsA ~ woolsey + woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+# nb should estimate theta parameter (dispersion parameter), whereas negbin would not and would require a specification
+plot(w1)
+summary(w1)
+
+w2 <- gam(visitsI ~ woolsey + woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+plot(w2)
+summary(w2)
+
+w3 <- gam(visitsR ~ woolsey + woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+plot(w3)
+summary(w3)
+
+w4 <- gam(visitsIC ~ woolsey + woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+plot(w4)
+summary(w4)
+
+w5 <- gam(visitsRC ~ woolsey + woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+plot(w5)
+summary(w5)
+```
+
+
