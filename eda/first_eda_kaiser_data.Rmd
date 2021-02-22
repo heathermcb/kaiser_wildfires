@@ -69,7 +69,7 @@ Continuing w cols:
 
 5. County.
 6. PO name - a smaller geographic unit within a county (postal delivery unit?)
-7. Zcta: this is the census geographical unit, and is identifiable. 
+7. Zcta: this is the census geographical unit, and is identifiable. LOL.
 8. Getty: Whether or not the getty fire was burning on this day. 
 9. Getty disaster: whether or not the zip was withing 20 km of the fire boundary.
 10. Woosley: same but for woosley.
@@ -286,7 +286,7 @@ k <- miss %>% filter(perc_miss == 0)
 length(k$perc_miss) / length(miss$perc_miss)
 ```
 
-THat's funny. The total percentage of missing observations was ~14% - 13.8% to be exact, and the percentage of counties missing over half the observations is also 13.8% exactly. I don't think it's an error. 24% are missing no observations at all. Because the patterns of missingness are the same for wf and nonwf pm, this is true for wf pm also. 
+That's funny. The total percentage of missing observations was ~14% - 13.8% to be exact, and the percentage of counties missing over half the observations is also 13.8% exactly. I don't think it's an error. 24% are missing no observations at all. Because the patterns of missingness are the same for wf and nonwf pm, this is true for wf pm also. 
 
 Check to see if any of the zips we care about are missing:
 
@@ -330,7 +330,7 @@ summary(d1[,14:21])
 ```
 
 I'm guessing pov_p is not percent of pop in poverty, since 100% is not a plausible value for it. What is it?
-Edited to add: Joan said it is a plausible value; there are some zips where everyone is below the poverty line. 
+Edited to add: Joan said it is a plausible value; there are some zips where everyone is below the poverty line. :( This actually does make sense because zips are a pretty small unit. Ex: a community housing complex.
 
 Checking missing data:
 

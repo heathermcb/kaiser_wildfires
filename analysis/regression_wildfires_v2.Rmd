@@ -15,6 +15,11 @@ library(mgcv)
 an_dat <- read.csv(("../data_processing/data/an_dat.csv"), row.names = 1)
 ```
 
+visitsA == outpatient visits
+visitsI == inpatient visits
+visitsR == ED visits 
+visitsIC == cardiopulmonary? cardiovascular? inpatient
+visitsIR == cardiopulmonary? cardiovascular? ED
 
 ```{r}
 ### check the relationship between temperature and hospital visits, so we know what kind of relationship it should have to the outcome
@@ -29,24 +34,24 @@ an_dat %>% ggplot(aes(x = wkmntp, y = visitsI)) + geom_line()
 
 
 ```{r}
-m1 <- gam(visitsA ~ getty + getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+m1 <- gam(visitsA ~ getty*getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
 # nb should estimate theta parameter (dispersion parameter), whereas negbin would not and would require a specification
 plot(m1)
 summary(m1)
 
-m2 <- gam(visitsI ~ getty + getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+m2 <- gam(visitsI ~ getty*getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
 plot(m2)
 summary(m2)
 
-m3 <- gam(visitsR ~ getty + getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+m3 <- gam(visitsR ~ getty*getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
 plot(m3)
 summary(m3)
 
-m4 <- gam(visitsIC ~ getty + getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+m4 <- gam(visitsIC ~ getty*getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
 plot(m4)
 summary(m4)
 
-m5 <- gam(visitsRC ~ getty + getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+m5 <- gam(visitsRC ~ getty*getty_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
 plot(m5)
 summary(m5)
 ```
@@ -55,26 +60,42 @@ summary(m5)
 And Woolsey:
 
 ```{r}
-w1 <- gam(visitsA ~ woolsey + woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+w1 <- gam(visitsA ~ woolsey*woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
 # nb should estimate theta parameter (dispersion parameter), whereas negbin would not and would require a specification
 plot(w1)
 summary(w1)
 
-w2 <- gam(visitsI ~ woolsey + woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+w2 <- gam(visitsI ~ woolsey*woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
 plot(w2)
 summary(w2)
 
-w3 <- gam(visitsR ~ woolsey + woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+w3 <- gam(visitsR ~ woolsey*woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
 plot(w3)
 summary(w3)
 
-w4 <- gam(visitsIC ~ woolsey + woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+w4 <- gam(visitsIC ~ woolsey*woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
 plot(w4)
 summary(w4)
 
-w5 <- gam(visitsRC ~ woolsey + woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
+w5 <- gam(visitsRC ~ woolsey*woolsey_disaster_20km + s(wkmntp) + s(wkyrseq), data = an_dat, family = nb(link = "log")) 
 plot(w5)
 summary(w5)
 ```
 
+Gonna write my own quick interpretation at the bottom here, because I want to make sure I didn't forget to add the interaction term again or something. 
+
+Getty models:
+- the getty fire increased outpatient visits overall, but not in the disaster zone, and outpatient visists in the disaster zone were on average the same as in other areas during the study period
+- inpatient visits were higher in the getty disaster zone apriori, but the getty fire did not affect them overall or in the disaster zone
+- ED visits were higher during getty but not any higher in the disaster zone
+- cardiopulmonary inpatient were not significantly affected by getty anywhere
+- cardiopulmonary ED were higher during getty but not additionally higher in the disaster zone
+
+Woolsey models:
+- woolsey disaster zone not sig affected by woolsey fire
+- woolsey disaster not sig affected
+- woolsey disaster not sig affected
+ETC. none are sig affected.
+
+However all visits inc significantly everywhere during the fire.
 

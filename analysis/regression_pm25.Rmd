@@ -1,0 +1,59 @@
+---
+title: "Kaiser PM 2.5 Models"
+author: "Heather"
+date: "22/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(mgcv)
+
+an_dat <- read.csv(("../data_processing/data/an_dat_pm25.csv"), row.names = 1)
+an_dat <- an_dat %>% mutate(lag_wf_pm = lag(wf_pm25))
+```
+
+visitsA is outpatient visits.
+
+visitsI is inpatient visits.
+
+visitsR is ED visits .
+
+visitsIC is cardiopulmonary? cardiovascular? inpatient visits.
+
+visitsIR is cardiopulmonary? cardiovascular? ED visits.
+
+```{r}
+m1 <- gam(visitsA ~ non_wf_pm + s(lag_wf_pm) + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
+plot(m1)
+summary(m1)
+```
+
+
+```{r}
+m2 <- gam(visitsI ~ non_wf_pm + s(lag_wf_pm) + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
+plot(m2)
+summary(m2)
+```
+
+
+```{r}
+m3 <- gam(visitsR ~ non_wf_pm + s(lag_wf_pm) + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
+plot(m3)
+summary(m3)
+```
+
+```{r}
+m4 <- gam(visitsIC ~ non_wf_pm + s(lag_wf_pm) + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
+plot(m4)
+summary(m4)
+```
+
+```{r}
+m5 <- gam(visitsRC ~ non_wf_pm + s(lag_wf_pm) + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
+plot(m5)
+summary(m5)
+```
