@@ -1,0 +1,107 @@
+---
+title: "New Wf Pm Data Exp."
+author: "Heather"
+date: "05/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(here)
+library(magrittr)
+
+# read in wf data and summarise for plotting later
+wf <- read_csv(here("/raw_data/wf_imp_IDW_intersect_SoCal.csv")) %>%
+  group_by(county, date, zip) %>%
+  summarise(
+    wf_pm25_idw_intrsct = mean(wf_pm25_idw_intrsct, na.rm = TRUE),
+    wf_pm25_imp_intrsct = mean(wf_pm25_imp_intrsct, na.rm = TRUE),
+    wf_pm25_imp_previous = mean(wf_pm25_imp_previous, na.rm = TRUE),
+    mean_pm25 = mean(mean_pm25, na.rm = TRUE)
+  ) 
+
+# read in some Kaiser data to get info about when fires are happening
+k <- read_csv(here("raw_data/DMEdatasets20200929172326/dme_anydisease_A_09282020.csv")) %>% 
+  mutate(date = as.Date(date, format='%d%b%Y')) %>% 
+  filter((is.na(zcta) == FALSE) & (is.na(getty) == FALSE)) %>%
+  select(date, county, zipid, zcta, getty, getty_disaster_20km, woolsey, woolsey_disaster_20km, non_wf_pm, wf_pm25) 
+
+# need to join by zcta since zips are fake. means we have to collapse one of the datasets from zip to zcta - did this w wf pm dataset
+# read in
+zipzcta <- read_csv(here("raw_data/zip_zcta_xwalk.csv")) %>% select(zip_code, zcta)
+
+# collapse to zcta
+wf %<>% left_join(zipzcta, by = c("zip" = "zip_code")) %>%
+  group_by(date, county, zcta) %>%
+  summarise(
+    mean_pm25 = mean(mean_pm25, na.rm = TRUE),
+    wf_pm25_imp_previous = mean(wf_pm25_imp_previous, na.rm = TRUE),
+    wf_pm25_idw_intrsct = mean(wf_pm25_idw_intrsct, na.rm = TRUE),
+    wf_pm25_imp_intrsct = mean(wf_pm25_imp_intrsct, na.rm = TRUE)
+  ) 
+
+# and join w kaiser:
+k %<>% left_join(wf, by = c("county", "date", "zcta"))
+```
+
+
+Plot w fire variables, just to see what they are and what they look like over the study period:
+
+```{r}
+k_plot <- k %>% group_by(county, date) %>% summarise_at(funs(mean(., na.rm = TRUE)), .vars = c("non_wf_pm", "wf_pm25", "wf_pm25_imp_intrsct", "wf_pm25_idw_intrsct", "mean_pm25", "wf_pm25_imp_previous", "getty", "woolsey")) %>% mutate(fire_on = getty + woolsey)
+
+k_plot %>% ggplot() + geom_point(aes(x = date, y = non_wf_pm, colour = fire_on)) + facet_wrap(facets = "county")
+k_plot %>% ggplot() + geom_point(aes(x = date, y = wf_pm25, colour = fire_on)) + facet_wrap(facets = "county")
+k_plot %>% ggplot() + geom_point(aes(x = date, y = wf_pm25_imp_intrsct, colour = fire_on)) + facet_wrap(facets = "county")
+k_plot %>% ggplot() + geom_point(aes(x = date, y = wf_pm25_imp_previous, colour = fire_on)) + facet_wrap(facets = "county")
+k_plot %>% ggplot() + geom_point(aes(x = date, y = wf_pm25_idw_intrsct, colour = fire_on)) + facet_wrap(facets = "county")
+k_plot %>% ggplot() + geom_point(aes(x = date, y = mean_pm25, colour = fire_on)) + facet_wrap(facets = "county")
+
+```
+
+```{r}
+k_plot %>% filter(county == "Los Angeles County" | county == "Ventura County" | county == "Kern County") %>% ggplot() + geom_point(aes(x = date, y = non_wf_pm, colour = fire_on)) + facet_wrap(facets = "county")
+
+k_plot %>% filter(county == "Los Angeles County" | county == "Ventura County" | county == "Kern County") %>% ggplot() + geom_point(aes(x = date, y = wf_pm25, colour = fire_on)) + facet_wrap(facets = "county")
+
+k_plot %>% filter(county == "Los Angeles County" | county == "Ventura County" | county == "Kern County") %>% ggplot() + geom_point(aes(x = date, y = mean_pm25, colour = fire_on)) + facet_wrap(facets = "county")
+
+k_plot %>% filter(county == "Los Angeles County" | county == "Ventura County" | county == "Kern County") %>% ggplot() + geom_point(aes(x = date, y = wf_pm25_imp_intrsct, colour = fire_on)) + facet_wrap(facets = "county")
+
+k_plot %>% filter(county == "Los Angeles County" | county == "Ventura County" | county == "Kern County") %>% ggplot() + geom_point(aes(x = date, y = wf_pm25_imp_previous, colour = fire_on)) + facet_wrap(facets = "county")
+
+k_plot %>% filter(county == "Los Angeles County" | county == "Ventura County" | county == "Kern County") %>% ggplot() + geom_point(aes(x = date, y = wf_pm25_idw_intrsct, colour = fire_on)) + facet_wrap(facets = "county")
+
+# calculate "non-wildfire pm"
+k_plot %<>% mutate(non_wf_pm_new = mean_pm25 - wf_pm25_idw_intrsct) 
+
+k_plot %>% filter(county == "Los Angeles County" | county == "Ventura County" | county == "Kern County") %>% ggplot() + geom_point(aes(x = date, y = non_wf_pm_new, colour = fire_on)) + facet_wrap(facets = "county")
+
+
+# find out how many days it's above 50 - for non-wf
+# find out which dates are above 50 and if they're part of the wildfire.
+```
+
+Ok so the point of this was to see if the wildfire pm data looks like it's properly accounting for wildfire pm. This would mean that the non-wildfire pm, which is (all pm - non-wildfire pm), looks plausible and doesn't get really, really high. 
+
+We noticed that the non wf pm is still going above 50 some days in LA County, and also above 50 many days in Kern County. These times also happen to coincide with wildfires, and aren't in the summer, when non-wf pm does peak. 
+
+A table of dates when the pm peaks: (2 peaks in LA County, and the rest in Kern)
+
+```{r}
+p <- k_plot %>% filter(non_wf_pm_new > 50 & (county == "Los Angeles County" | county == "Kern County"))
+p %>% knitr::kable()
+```
+
+Looking up if these happened during a wildfire:
+
+Re LA County December 2017:
+https://en.wikipedia.org/wiki/December_2017_Southern_California_wildfires
+Looks like there were wildfires during December 2017 all over Southern Calif; all 2017 dates here in Kern and LA are during some wildfire.
+
+Doesn't seem there were fires in November or December 2016, or in February 2018 or January 2019.
+
+
+
+
