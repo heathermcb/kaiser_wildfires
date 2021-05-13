@@ -1,0 +1,61 @@
+---
+title: "New Wf Pm Data Exp."
+author: "Heather"
+date: "05/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(here)
+library(magrittr)
+
+# read in wf data and summarise for plotting later
+wf1 <- read_csv(here("/raw_data/wf_imp_IDW_intersect_SoCal.csv")) %>%
+  group_by(county, date, zip) %>%
+  summarise(
+    wf_pm25_imp_previous = mean(wf_pm25_imp_previous, na.rm = TRUE),
+    wf_pm25_idw_intrsct = mean(wf_pm25_idw_intrsct, na.rm = TRUE),
+    wf_pm25_imp_intrsct = mean(wf_pm25_imp_intrsct, na.rm = TRUE),
+    mean_pm25 = mean(mean_pm25, na.rm = TRUE)
+  ) 
+
+# read in some Kaiser data to get info about when fires are happening
+k1 <- read_csv(here("raw_data/DMEdatasets20200929172326/dme_anydisease_A_09282020.csv")) %>% 
+  mutate(date = as.Date(date, format='%d%b%Y')) %>% 
+  filter((is.na(zcta) == FALSE) & (is.na(getty) == FALSE)) %>%
+  select(date, county, zipid, zcta, getty, getty_disaster_20km, woolsey, woolsey_disaster_20km, non_wf_pm, wf_pm25) 
+
+# need to join by zcta since zips are fake. means we have to collapse one of the datasets from zip to zcta - did this w wf pm dataset
+# read in
+zipzcta <- read_csv(here("raw_data/zip_zcta_xwalk.csv")) %>% select(zip_code, zcta)
+
+# collapse to zcta
+wf1 %<>% left_join(zipzcta, by = c("zip" = "zip_code")) %>%
+  group_by(date, county, zcta) %>%
+  summarise(
+    mean_pm25 = mean(mean_pm25, na.rm = TRUE),
+    wf_pm25_idw_intrsct = mean(wf_pm25_idw_intrsct, na.rm = TRUE),
+    wf_pm25_imp_intrsct = mean(wf_pm25_imp_intrsct, na.rm = TRUE),
+    wf_pm25_imp_previous = mean(wf_pm25_imp_previous, na.rm = TRUE)
+  ) 
+
+# and join w kaiser:
+k1 <- k1 %>% left_join(wf1, by = c("county", "date", "zcta"))
+```
+
+
+Plot w fire variables, just to see what they are and what they look like over the study period:
+
+```{r}
+k_plot1 <- k1 %>% group_by(county, date) %>% summarise_at(funs(mean(., na.rm = TRUE)), .vars = c("wf_pm25_imp_intrsct", "wf_pm25_idw_intrsct", "mean_pm25", "wf_pm25_imp_previous", "getty", "woolsey")) %>% mutate(fire_on = getty + woolsey)
+
+k_plot1 %>% ggplot() + geom_point(aes(x = date, y = mean_pm25 - wf_pm25_imp_intrsct, colour = fire_on)) + facet_wrap(facets = "county")
+k_plot1 %>% ggplot() + geom_point(aes(x = date, y = wf_pm25, colour = fire_on)) + facet_wrap(facets = "county")
+k_plot1 %>% ggplot() + geom_point(aes(x = date, y = wf_pm25_imp_intrsct, colour = fire_on)) + facet_wrap(facets = "county")
+k_plot1 %>% ggplot() + geom_point(aes(x = date, y = wf_pm25_imp_previous, colour = fire_on)) + facet_wrap(facets = "county")
+k_plot1 %>% ggplot() + geom_point(aes(x = date, y = wf_pm25_idw_intrsct, colour = fire_on)) + facet_wrap(facets = "county")
+k_plot1 %>% ggplot() + geom_point(aes(x = date, y = mean_pm25, colour = fire_on)) + facet_wrap(facets = "county")
+
+```

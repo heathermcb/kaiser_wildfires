@@ -11,7 +11,7 @@ library(tidyverse)
 library(here)
 library(viridis)
 
-d1 <- read_csv(here("/data_processing/raw_data/DMEdatasets20200929172326/dme_anydisease_A_09282020.csv"))
+d1 <- read_csv(here("/raw_data/DMEdatasets20200929172326/dme_anydisease_A_09282020.csv"))
 d1 <- d1 %>%
   filter((is.na(zcta) == FALSE) & (is.na(getty) == FALSE)) %>% # attempt to filter out rows outside the study area
   mutate(date = as.Date(date, format='%d%b%Y'), admitdate = as.Date(date, format='%d%b%Y')) #standardize dates into date class

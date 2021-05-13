@@ -14,8 +14,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(here) # beware of here from lubridate masking here from here later on - can cause errors. 
-fls = list.files(path = here("/data_processing/raw_data/DMEdatasets20200929172326"))
-setwd(here("/data_processing/raw_data/DMEdatasets20200929172326"))
+fls = list.files(path = here("/raw_data/DMEdatasets20200929172326"))
+setwd(here("/raw_data/DMEdatasets20200929172326"))
 dt = lapply(fls, read.csv)
 ```
 
@@ -393,6 +393,20 @@ wild %>% ggplot(aes(x = wf_pm25, y = std_visits)) + geom_point()
 ```
 
 
+Checking which counties have significantly more hospital visits:
+
+```{r}
+d1 %>% mutate(visit_rate = case_when(county == "Los Angeles County" ~ daily_byzip_ct_A_anydisease/10,
+                                county == "Kern County" ~ daily_byzip_ct_A_anydisease/0.9,
+                                county == "Orange County" ~ daily_byzip_ct_A_anydisease/3.1,
+                                county == "Riverside County" ~ daily_byzip_ct_A_anydisease/3.3,
+                                county == "San Diego County" ~ daily_byzip_ct_A_anydisease/3.3,
+                                county == "San Bernadino County" ~ daily_byzip_ct_A_anydisease/2.1,
+                                county == "Ventura County" ~ 0.8,
+                                TRUE ~ 0)) %>% 
+  group_by(county, date) %>% summarise_at(.vars = c("visit_rate"), .funs = sum) %>%
+  ggplot() + geom_point(aes(x = date, y = visit_rate)) + facet_wrap(facets = c("county"))
+```
 
 
 

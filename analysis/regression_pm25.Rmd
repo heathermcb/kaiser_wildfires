@@ -13,7 +13,7 @@ library(here)
 library(mgcv)
 
 an_dat <- read.csv(("../data_processing/data/an_dat_pm25.csv"), row.names = 1)
-an_dat <- an_dat %>% mutate(lag_wf_pm = lag(wf_pm25))
+an_dat <- an_dat %>% mutate(lag_wf_pm = lag(wf_pm25_imp_intrsct), non_wf_pm = mean_pm25 - wf_pm25_imp_intrsct)
 ```
 
 visitsA is outpatient visits.
@@ -27,7 +27,7 @@ visitsIC is cardiopulmonary? cardiovascular? inpatient visits.
 visitsIR is cardiopulmonary? cardiovascular? ED visits.
 
 ```{r}
-m1 <- gam(visitsA ~ non_wf_pm + s(lag_wf_pm) + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
+m1 <- gam(visitsA ~ s(non_wf_pm) + s(lag_wf_pm) + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
 plot(m1)
 summary(m1)
 ```
@@ -41,19 +41,19 @@ summary(m2)
 
 
 ```{r}
-m3 <- gam(visitsR ~ non_wf_pm + s(lag_wf_pm) + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
+m3 <- gam(visitsR ~ s(non_wf_pm) + lag_wf_pm + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
 plot(m3)
 summary(m3)
 ```
 
 ```{r}
-m4 <- gam(visitsIC ~ non_wf_pm + lag_wf_pm + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
+m4 <- gam(visitsIC ~ s(non_wf_pm) + lag_wf_pm + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
 plot(m4)
 summary(m4)
 ```
 
 ```{r}
-m5 <- gam(visitsRC ~ non_wf_pm + lag_wf_pm + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
+m5 <- gam(visitsRC ~ s(non_wf_pm) + lag_wf_pm + s(tmean) + s(day), data = an_dat, family = nb(link = "log"))
 plot(m5)
 summary(m5)
 ```

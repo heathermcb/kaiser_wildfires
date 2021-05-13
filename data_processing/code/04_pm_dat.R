@@ -60,10 +60,33 @@ dat <- dat %>% mutate(zcta = as.factor(zcta)) %>%
     visitsRC,
     county,
     po_name,
-    non_wf_pm,
-    wf_pm25,
     tmean
   )
+
+# add new PM 2.5 data
+wf <- read_csv(here("/raw_data/wf_imp_IDW_intersect_SoCal_20Apr2021.csv")) %>%
+  group_by(county, date, zip) %>%
+  summarise(
+    wf_pm25_idw_intrsct = mean(wf_pm25_idw_intrsct, na.rm = TRUE),
+    wf_pm25_imp_intrsct = mean(wf_pm25_imp_intrsct, na.rm = TRUE),
+    mean_pm25 = mean(mean_pm25, na.rm = TRUE)
+  ) 
+
+# need to go by zcta bc can't match zips
+zipzcta <- read_csv(here("raw_data/zip_zcta_xwalk.csv")) %>% select(zip_code, zcta)
+
+# collapse to zcta
+wf <- wf %>% left_join(zipzcta, by = c("zip" = "zip_code")) %>%
+  group_by(date, county, zcta) %>%
+  summarise(
+    mean_pm25 = mean(mean_pm25, na.rm = TRUE),
+    wf_pm25_idw_intrsct = mean(wf_pm25_idw_intrsct, na.rm = TRUE),
+    wf_pm25_imp_intrsct = mean(wf_pm25_imp_intrsct, na.rm = TRUE),
+  ) %>%
+  mutate(zcta = as.factor(zcta))
+
+dat <- dat %>% 
+  left_join(wf, by = c("county", "date", "zcta"))
 
 # add numbered days
 l <- sort(unique(dat$date))

@@ -4,9 +4,10 @@
 # - merge the 5 outcome files into one dataset containing all outcomes
 # - add temperature data for all zips
 # - add a variable called weekyears to help with temporal covariates
-# - that will make an analytic dataset
+# - add updated and corrected PM 2.5 data
+# That will make an analytic dataset.
 
-
+# Libraries & Read ----
 library(tidyverse)
 library(here)
 
@@ -14,6 +15,7 @@ fls = list.files(path = here("/raw_data/DMEdatasets20200929172326"))
 setwd(here("/raw_data/DMEdatasets20200929172326"))
 dt = lapply(fls, read.csv)
 
+# Combine Datasets ----
 # we know that each file is identical save the patient visits column
 # therefore, just add subsequent columns to the first dataframe
 dat <-
@@ -36,6 +38,7 @@ dat <-
     date = as.Date(date, format = '%d%b%Y'),
     admitdate = as.Date(date, format = '%d%b%Y'))
 
+# Temperature Data ----
 # read in temp data
 tps = list.files(path = here("/data"), pattern = '*.rds')
 setwd(here("/data"))
@@ -51,8 +54,34 @@ tp <- do.call("rbind", tp) %>%
 dat <- dat %>% mutate(zcta = as.factor(zcta)) %>% 
   left_join(tp, by = c("zcta", "date"))
 
+# PM 2.5 Correction ----
+wf <- read_csv(here("/raw_data/wf_imp_IDW_intersect_SoCal_20Apr2021.csv")) %>%
+  group_by(county, date, zip) %>%
+  summarise(
+    wf_pm25_idw_intrsct = mean(wf_pm25_idw_intrsct, na.rm = TRUE),
+    wf_pm25_imp_intrsct = mean(wf_pm25_imp_intrsct, na.rm = TRUE),
+    mean_pm25 = mean(mean_pm25, na.rm = TRUE)
+  ) 
+
+# need to go by zcta bc can't match zips
+zipzcta <- read_csv(here("raw_data/zip_zcta_xwalk.csv")) %>% select(zip_code, zcta)
+
+# collapse to zcta
+wf <- wf %>% left_join(zipzcta, by = c("zip" = "zip_code")) %>%
+  group_by(date, county, zcta) %>%
+  summarise(
+    mean_pm25 = mean(mean_pm25, na.rm = TRUE),
+    wf_pm25_idw_intrsct = mean(wf_pm25_idw_intrsct, na.rm = TRUE),
+    wf_pm25_imp_intrsct = mean(wf_pm25_imp_intrsct, na.rm = TRUE),
+  ) %>%
+  mutate(zcta = as.factor(zcta))
+
+dat <- dat %>% 
+  left_join(wf, by = c("county", "date", "zcta"))
+
+# Aggregation ----
 library(lubridate)
-# aggregate both visits (by type of visit) and temperature by week
+# aggregate both visits (by type of visit), temperature, and PM 2.5 by week
 dat <- dat %>% mutate(year = year(date), week = week(date)) %>%
   mutate(week = formatC(
     as.numeric(week),
@@ -75,14 +104,19 @@ dat <- dat %>% mutate(year = year(date), week = week(date)) %>%
     woolsey = max(woolsey),
     getty_disaster_20km = max(getty_disaster_20km), 
     woolsey_disaster_20km = max(woolsey_disaster_20km), 
-    fire = max(fire)) 
+    fire = max(fire),
+    mean_pm25 = mean(mean_pm25, na.rm = TRUE),
+    wf_pm25_idw_intrsct = mean(wf_pm25_idw_intrsct, na.rm = TRUE),
+    wf_pm25_imp_intrsct = mean(wf_pm25_imp_intrsct, na.rm = TRUE)
+    ) 
 
-
+# Add numbering for modelling ----
 # weekyears
 s = sort(unique(dat$week_year))
 wkyrseq <- seq(1, length(s), 1)
 s <- data.frame(s, wkyrseq) %>% rename(week_year = s)
 dat <- dat %>% left_join(s)
+
 
 # write
 write.csv(dat, here::here('/data/an_dat.csv'))
