@@ -14,9 +14,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyverse)
 library(here) # beware of here from lubridate masking here from here later on - can cause errors. 
-fls = list.files(path = here("/raw_data/DMEdatasets20200929172326"))
-setwd(here("/raw_data/DMEdatasets20200929172326"))
-dt = lapply(fls, read.csv)
+fls = list.files(path = here("data_processing/raw_data/DMEdatasets20200929172326"))
+setwd(here("data_processing/raw_data/DMEdatasets20200929172326"))
+dt = lapply(fls, read_csv)
 ```
 
 Check dims. 
@@ -25,7 +25,7 @@ Check dims.
 lapply(dt, dim)
 ```
 
-In here we have wildfire occurences, pm concentrations, health outcomes, and soc ec covariates.  
+In here we have wildfire occurrences, pm concentrations, health outcomes, and soc ec covariates.  
 
 The five csv files each contain data for a different outcome. Respectively, they have outpatient visits, inpatient visits, ED visits, inpatient visits related to cardiovascular problems, and ED visits related to cardiovascular problems. These are visits by Kaiser patients to Kaiser care facilities (I think - Joan confirm?).
 

@@ -11,8 +11,8 @@
 library(tidyverse)
 library(here)
 
-fls = list.files(path = here("/raw_data/DMEdatasets20200929172326"))
-setwd(here("/raw_data/DMEdatasets20200929172326"))
+fls = list.files(path = here("raw_data", "DMEdatasets20200929172326"))
+setwd(here("raw_data", "DMEdatasets20200929172326"))
 dt = lapply(fls, read.csv)
 
 # Combine Datasets ----
@@ -40,8 +40,8 @@ dat <-
 
 # Temperature Data ----
 # read in temp data
-tps = list.files(path = here("/data"), pattern = '*.rds')
-setwd(here("/data"))
+tps = list.files(path = here("data"), pattern = '*.rds')
+setwd(here("data"))
 tp = lapply(tps, readRDS)
 
 # create temp data frame
@@ -55,7 +55,7 @@ dat <- dat %>% mutate(zcta = as.factor(zcta)) %>%
   left_join(tp, by = c("zcta", "date"))
 
 # PM 2.5 Correction ----
-wf <- read_csv(here("/raw_data/wf_imp_IDW_intersect_SoCal_20Apr2021.csv")) %>%
+wf <- read_csv(here("raw_data", "wf_imp_IDW_intersect_SoCal_20Apr2021.csv")) %>%
   group_by(county, date, zip) %>%
   summarise(
     wf_pm25_idw_intrsct = mean(wf_pm25_idw_intrsct, na.rm = TRUE),
@@ -78,6 +78,14 @@ wf <- wf %>% left_join(zipzcta, by = c("zip" = "zip_code")) %>%
 
 dat <- dat %>% 
   left_join(wf, by = c("county", "date", "zcta"))
+
+# Edit: Daily data for DLNM 
+dat <- dat %>% 
+  select(date, zipid, visitsA, visitsI, visitsIC, visitsR, visitsRC, county,
+         zcta, getty, woolsey, getty_disaster_20km, woolsey_disaster_20km, pov_p, 
+         edu_lt_hs_p, med_inc, pop_gt65_p, tot_pop, black_p, hispan_p, white_p, 
+         tmean, mean_pm25, wf_pm25_idw_intrsct) 
+write.csv(dat, here::here('data', 'an_dat_daily.csv'))
 
 # Aggregation ----
 library(lubridate)

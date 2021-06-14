@@ -1,0 +1,217 @@
+---
+title: "Kaiser Wildfire Models"
+output: html_document
+---
+
+The goal of this file is to both create and run lag models to address our 
+research question, which is 'does wildfire-related PM 2.5 increase health care
+visits (of various types) in the Kaiser DME population?", and also to explain
+modelling choices so that they can be checked later. 
+
+Load packages + read.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(splines)
+library(dlnm)
+library(mgcv)
+
+an_dat <- read.csv(("../data_processing/data/an_dat_daily.csv"), row.names = 1)
+```
+
+Research question and data:
+- we want to see if wildfire PM is associated with hospital visits in this 
+particular population.
+- we have daily healthcare visit counts for five kinds of visits, and daily PM 
+values for both wf and non-wf PM, and both are at the zcta level.
+- we have four years of data (2016-2020).
+
+Model choice:
+- we're going to use a negative binomial model because this is count data, 
+but many of our counts are very small and we want them to affect the effect 
+estimates. Poisson or Quasi-Poisson would minimize the influence of small counts
+on the outcome. Negbin also accounts for overdispersion better than any Poisson 
+- good.
+
+Confounding:
+- we will adjust for temperature, time (day of the study period), and non-wf PM.
+- temperature definitely could cause wildfires -> wf PM or temperature effects 
+-> worsen wildfire pm and it could cause hospital visits through multiple 
+mechanisms
+- there could be long-term time trends in both wf and visits, and there is 
+definitely seasonality
+- the conditions that lead to high wf PM could also lead to high non-wf PM, 
+making it a potential confounder as well. 
+- we do not need to adjust for day of the week because wildfires don't follow 
+regular 9-5 working hours. 
+- we should use a ns() term for day with 3*4 dfs since we have about 4 years
+worth of data.
+- use natural spline terms for other things because we are not sure of the
+relationships between PM and visits or temperature and visits in this 
+particular population.
+
+DLNM:
+- we do not know the correct window of exposure to use. We are interested in 
+that. We suspect it's on the order of days, after the exposure, so we'll try 
+up to lag 7. 
+- we are concerned about the number of 0s, because we aggregated by week in our
+previous models to avoid having very low counts. In a daily DLNM, we will have 
+low counts. We should ask Marianthi about this. 
+
+- Heather's guess about the effect of 0s in the model is that as long as we are
+not so zero inflated it's not necessarily a problem. (Should we check for 
+0 inflation, with DHARMa or something? Option for glmmTMB?)
+- But it does mean that we will have lower power - I guess
+that if there are a lot of 0s, but more importantly not a lot of non-zero 
+observations, it means that the effect size relative to the sample size is low, 
+which means lower power?
+
+In order to choose the right kind of lag model, we need to check 
+autocorrelation.
+
+Plot acf of the exposure:
+
+```{r}
+acf(an_dat$wf_pm25_idw_intrsct, lag.max = 7, na.action = na.pass)
+acf(an_dat$wf_pm25_idw_intrsct, lag.max = 30, na.action = na.pass)
+```
+
+There is very little autocorrelation in the exposure at all. This means we don't
+have to actually make a constrained DLNM, and we can make an unconstrained one.
+I think we prefer to be conservative and make a constrained one instead of 
+lag-specific models. 
+
+Lag all exposures:
+
+```{r}
+an_dat <- an_dat %>% mutate(
+  wf_pm_Lag0 = wf_pm25_idw_intrsct,
+  wf_pm_Lag1 = lag(wf_pm25_idw_intrsct, 1), 
+  wf_pm_Lag2 = lag(wf_pm25_idw_intrsct, 2), 
+  wf_pm_Lag3 = lag(wf_pm25_idw_intrsct, 3), 
+  wf_pm_Lag4 = lag(wf_pm25_idw_intrsct, 4), 
+  wf_pm_Lag5 = lag(wf_pm25_idw_intrsct, 5), 
+  wf_pm_Lag6 = lag(wf_pm25_idw_intrsct, 6))
+
+an_dat <- an_dat %>% mutate(
+  temp_lag0 = tmean,
+  temp_lag1 = lag(tmean, 1),
+  temp_lag2 = lag(tmean, 2),
+  temp_lag3 = lag(tmean, 3),
+  temp_lag4 = lag(tmean, 4),
+  temp_lag5 = lag(tmean, 5),
+  temp_lag6 = lag(tmean, 6))
+
+an_dat <- an_dat %>% mutate(
+  non_wf_pm_lag0 = mean_pm25,
+  non_wf_pm_lag1 = lag(mean_pm25, 1),
+  non_wf_pm_lag2 = lag(mean_pm25, 2),
+  non_wf_pm_lag3 = lag(mean_pm25, 3),
+  non_wf_pm_lag4 = lag(mean_pm25, 4),
+  non_wf_pm_lag5 = lag(mean_pm25, 5),
+  non_wf_pm_lag6 = lag(mean_pm25, 6))
+```
+
+Get mean temperature over the lag period and mean pm. 
+
+```{r}
+an_dat$wk_mean_non_wf_pm <- rowMeans(an_dat[,39:45])
+an_dat$wk_mean_temp <- rowMeans(an_dat[,32:38])
+```
+
+Create an appropriate date variable (want it to be continuous):
+
+```{r}
+an_dat <- an_dat %>% mutate(date = lubridate::as_date(an_dat$date))
+# make a date seq bc GAM is interpreting this as a factor??
+date <- sort(unique(an_dat$date))
+day_seq <- seq(from = 1, to = 766, by = 0.5)
+days <- data.frame(date, day_seq)
+an_dat <- an_dat %>% left_join(days)
+```
+
+
+We're ready to make the unconstrained lag model. Starting with outpatient 
+visits as the outcome. 
+
+```{r}
+m1 <- gam(data = an_dat, visitsA ~ wf_pm_Lag0 + wf_pm_Lag1 + wf_pm_Lag2 +
+                  wf_pm_Lag3 + wf_pm_Lag4 + wf_pm_Lag5 + wf_pm_Lag6 +
+                  s(wk_mean_non_wf_pm) + s(wk_mean_temp) + 
+                  ns(day_seq, df = 12), 
+                  family = nb(link= "log"))
+```
+
+
+```{r}
+summary(m1)
+plot(m1)
+```
+
+So this model doesn't make a lot of sense to me. 
+
+First, I think we'd expect non-wf PM to have some effect on the number of 
+hospital visits, when it looks like increased PM between 20 and 40 actually
+leads to fewer health care visits...
+
+Temperature at least has a linear tail which is what we'd expect, but again
+it looks strange. 
+
+All of our effect estimates are in the opposite direction we'd expect. Did we 
+mess up??
+
+This model was with outpatient visits as the outcome. Going to make the rest
+of the models in case they are helpful. 
+
+```{r}
+m2 <- gam(data = an_dat, visitsI ~ wf_pm_Lag0 + wf_pm_Lag1 + wf_pm_Lag2 +
+                  wf_pm_Lag3 + wf_pm_Lag4 + wf_pm_Lag5 + wf_pm_Lag6 +
+                  s(wk_mean_non_wf_pm) + s(wk_mean_temp) + 
+                  ns(day_seq, df = 12), 
+                  family = nb(link= "log"))
+```
+
+```{r}
+summary(m2)
+plot(m2)
+```
+
+```{r}
+m3 <- gam(data = an_dat, visitsIC ~ wf_pm_Lag0 + wf_pm_Lag1 + wf_pm_Lag2 +
+                  wf_pm_Lag3 + wf_pm_Lag4 + wf_pm_Lag5 + wf_pm_Lag6 +
+                  s(wk_mean_non_wf_pm) + s(wk_mean_temp) + 
+                  ns(day_seq, df = 12), 
+                  family = nb(link= "log"))
+```
+
+```{r}
+summary(m3)
+plot(m3)
+```
+
+```{r}
+m4 <- gam(data = an_dat, visitsR ~ wf_pm_Lag0 + wf_pm_Lag1 + wf_pm_Lag2 +
+                  wf_pm_Lag3 + wf_pm_Lag4 + wf_pm_Lag5 + wf_pm_Lag6 +
+                  s(wk_mean_non_wf_pm) + s(wk_mean_temp) + 
+                  ns(day_seq, df = 12), 
+                  family = nb(link= "log"))
+```
+
+```{r}
+summary(m4)
+plot(m4)
+```
+
+```{r}
+m5 <- gam(data = an_dat, visitsRC ~ wf_pm_Lag0 + wf_pm_Lag1 + wf_pm_Lag2 +
+                  wf_pm_Lag3 + wf_pm_Lag4 + wf_pm_Lag5 + wf_pm_Lag6 +
+                  s(wk_mean_non_wf_pm) + s(wk_mean_temp) + 
+                  ns(day_seq, df = 12), 
+                  family = nb(link= "log"))
+```
+
+```{r}
+summary(m5)
+plot(m5)
+```
